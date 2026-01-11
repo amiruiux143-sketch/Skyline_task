@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyline Fixed</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sky-accent: #007aff;
+            --sky-bg: #000;
+            --sky-card: #111113;
+            --sky-border: rgba(255,255,255,0.1);
+            --anim: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--sky-bg); color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; min-height: 100vh; }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .app-container { grid-template-columns: 350px 1fr; padding: 50px; }
+        }
+
+        .glass-card {
+            background: var(--sky-card);
+            border: 1px solid var(--sky-border);
+            border-radius: 25px;
+            padding: 20px;
+        }
+
+        /* Календарь */
+        .month-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-weight: 800; color: var(--sky-accent); }
+        .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+        .day { 
+            aspect-ratio: 1; display: flex; align-items: center; justify-content: center; 
+            border-radius: 10px; font-size: 13px; cursor: pointer; transition: 0.2s;
+        }
+        .day:hover { background: #222; }
+        .day.today { background: var(--sky-accent); box-shadow: 0 0 15px var(--sky-accent); }
+        .day.has-event { border-bottom: 2px solid var(--sky-accent); }
+
+        /* Список задач */
+        .task-node {
+            background: #1c1c1e;
+            padding: 18px;
+            border-radius: 18px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            animation: fadeIn 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .task-node:active { transform: scale(0.98); opacity: 0.7; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .task-info b { font-size: 16px; }
+        .task-info p { font-size: 10px; color: #555; text-transform: uppercase; margin-top: 2px; }
+
+        .empty-state { text-align: center; margin-top: 40px; color: #333; }
+
+        .btn-add {
+            position: fixed; bottom: 30px; right: 30px;
+            width: 60px; height: 60px; background: #fff; color: #000;
+            border-radius: 50%; border: none; font-size: 24px; cursor: pointer;
+            box-shadow: 0 10px 25px rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <aside>
+            <h1 style="margin-bottom: 20px; font-weight: 900;">SKYLINE <span style="color:var(--sky-accent)">TASK</span></h1>
+            <div class="glass-card">
+                <div class="month-nav">
+                    <i class="fa fa-chevron-left" onclick="App.move(-1)"></i>
+                    <span id="m-label">MONTH</span>
+                    <i class="fa fa-chevron-right" onclick="App.move(1)"></i>
+                </div>
+                <div class="grid" id="calendar-grid"></div>
+            </div>
+        </aside>
+
+        <main>
+            <h2 id="view-title" style="margin-bottom: 20px;">Планы</h2>
+            <div id="task-list"></div>
+        </main>
+    </div>
+
+    <button class="btn-add" onclick="App.addTask()"><i class="fa fa-plus"></i></button>
+
+    <script>
+        const App = {
+            currentDate: new Date(),
+            selectedKey: null,
+            db: JSON.parse(localStorage.getItem('sky_v4')) || {},
+
+            init() {
+                this.render();
+                // По дефолту показываем задачи на сегодня
+                const today = new Date();
+                this.showTasks(`${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`);
+            },
+
+            move(d) {
+                this.currentDate.setMonth(this.currentDate.getMonth() + d);
+                this.render();
+            },
+
+            render() {
+                const grid = document.getElementById('calendar-grid');
+                grid.innerHTML = '';
+                const m = this.currentDate.getMonth();
+                const y = this.currentDate.getFullYear();
+                
+                document.getElementById('m-label').innerText = new Intl.DateTimeFormat('ru-RU', {month:'long'}).format(this.currentDate).toUpperCase();
+
+                const first = new Date(y, m, 1).getDay();
+                let offset = first === 0 ? 6 : first - 1;
+                for(let i=0; i<offset; i++) grid.innerHTML += '<div></div>';
+
+                const days = new Date(y, m+1, 0).getDate();
+                for(let d=1; d<=days; d++) {
+                    const key = `${y}-${m}-${d}`;
+                    const isToday = new Date().toDateString() === new Date(y,m,d).toDateString();
+                    const hasTasks = this.db[key] && this.db[key].length > 0;
+                    grid.innerHTML += `
+                        <div class="day ${isToday?'today':''} ${hasTasks?'has-event':''}" onclick="App.showTasks('${key}')">
+                            ${d}
+                        </div>
+                    `;
+                }
+            },
+
+            addTask() {
+                const text = prompt("Что нужно сделать?");
+                if(!text) return;
+                
+                // Если день не выбран, берем текущий
+                const key = this.selectedKey || `${new Date().getFullYear()}-${new Date().getMonth()}-${new Date().getDate()}`;
+                
+                if(!this.db[key]) this.db[key] = [];
+                this.db[key].push({ id: Date.now(), text: text });
+                
+                this.save();
+                this.showTasks(key);
+                this.render(); // Обновить точки под числами
+            },
+
+            showTasks(key) {
+                this.selectedKey = key;
+                const list = document.getElementById('task-list');
+                const items = this.db[key] || [];
+                const day = key.split('-')[2];
+                
+                document.getElementById('view-title').innerText = `Задачи на ${day} число`;
+                
+                if(items.length === 0) {
+                    list.innerHTML = `<div class="empty-state"><i class="fa fa-coffee" style="display:block; font-size:30px; margin-bottom:10px"></i>Свободно</div>`;
+                } else {
+                    list.innerHTML = items.map(t => `
+                        <div class="task-node" onclick="App.deleteTask('${key}', ${t.id})">
+                            <div class="task-info">
+                                <b>${t.text}</b>
+                                <p>Нажми, чтобы завершить</p>
+                            </div>
+                            <i class="fa fa-check" style="color:var(--sky-accent)"></i>
+                        </div>
+                    `).join('');
+                }
+            },
+
+            deleteTask(key, id) {
+                // Фильтруем массив, оставляя всё кроме этой задачи
+                this.db[key] = this.db[key].filter(t => t.id !== id);
+                this.save();
+                this.showTasks(key);
+                this.render(); // Чтобы убрать точку из календаря, если задач больше нет
+            },
+
+            save() {
+                localStorage.setItem('sky_v4', JSON.stringify(this.db));
+            }
+        };
+
+        window.onload = () => App.init();
+    </script>
+</body>
+</html>
